@@ -4,23 +4,25 @@ import shutil
 import unicodedata
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from mutagen.easyid3 import EasyID3
 from collections import defaultdict
 import pythoncom
 import win32com.client
 
 # Define the path to the folder with MP3 files
-music_folder = r"C:\Users\alexg\Music\temp1"
+music_folder = r"D:\Music"
 destination_folder = r"C:\Users\alexg\Music\Temp3"
 cache_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")  # Pasta cache na raiz do projeto
 
 # Configuration
 test_limit = 999999  # Limit of files for the initial test (modifiable)
-songs_per_artist = 4  # Number of songs to select per artist in Group 1
-max_size_gb = 20  # Maximum total size of files to copy or link, in GB
+songs_per_artist = 2  # Number of songs to select per artist in Group 1
+max_size_gb = 5  # Maximum total size of files to copy or link, in GB
 copy_mode = True  # If True, copy files; if False, create Windows shortcuts (.lnk)
 use_cache = True  # If True, use cache when available; if False, always rescan
 force_rescan = False  # If True, force rescan even if cache exists
+parallel_workers = 4  # Number of parallel threads for processing
 
 # Convert max size in GB to bytes for comparison
 max_size_bytes = max_size_gb * (1024 ** 3)
@@ -35,6 +37,37 @@ def get_cache_filename(music_folder):
     """Gera nome único do arquivo de cache baseado na pasta de música."""
     folder_hash = abs(hash(music_folder)) % (10 ** 8)
     return os.path.join(cache_folder, f"music_cache_{folder_hash}.json")
+
+def get_latest_cache_file(music_folder):
+    """Encontra o arquivo de cache mais recente para a pasta de música."""
+    if not os.path.exists(cache_folder):
+        return None
+    
+    # Normalizar o caminho para comparação
+    normalized_music_folder = os.path.normpath(music_folder)
+    
+    cache_files = []
+    for file in os.listdir(cache_folder):
+        if file.startswith("music_cache_") and file.endswith(".json"):
+            cache_file_path = os.path.join(cache_folder, file)
+            try:
+                with open(cache_file_path, 'r', encoding='utf-8') as f:
+                    cache_data = json.load(f)
+                
+                # Verificar se é para a mesma pasta (normalizada)
+                cached_folder = os.path.normpath(cache_data.get("music_folder", ""))
+                if cached_folder == normalized_music_folder:
+                    file_time = os.path.getmtime(cache_file_path)
+                    cache_files.append((file_time, cache_file_path, cache_data))
+            except:
+                continue
+    
+    if not cache_files:
+        return None
+    
+    # Retornar o arquivo mais recente
+    cache_files.sort(key=lambda x: x[0], reverse=True)
+    return cache_files[0][1]
 
 def get_folder_modification_time(folder):
     """Obtém o tempo de modificação mais recente da pasta e subpastas."""
@@ -82,7 +115,10 @@ def save_cache(songs, music_folder):
 def load_cache(music_folder):
     """Carrega a lista de músicas do cache se disponível e válido."""
     try:
-        cache_file = get_cache_filename(music_folder)
+        cache_file = get_latest_cache_file(music_folder)
+        if not cache_file:
+            print("Nenhum arquivo de cache encontrado para esta pasta.")
+            return None
         
         if not os.path.exists(cache_file):
             print("Arquivo de cache não encontrado.")
@@ -146,7 +182,7 @@ def list_mp3_files_with_cache(folder, limit=None):
     
     # Se não há cache válido, faz varredura completa
     print("Realizando varredura completa da pasta de música...")
-    songs = list_mp3_files(folder, limit)
+    songs = list_mp3_files_parallel(folder, limit)
     
     # Salva no cache para próximas execuções
     if songs and use_cache:
@@ -191,6 +227,72 @@ def list_mp3_files(folder, limit=None):
                     return songs
 
     print(f"Completed listing MP3 files. Total MP3 files found: {len(songs)}")
+    return songs
+
+def list_mp3_files_parallel(folder, limit=None, max_workers=None):
+    """Lista arquivos MP3 usando processamento paralelo para maior velocidade."""
+    if max_workers is None:
+        max_workers = parallel_workers
+    
+    print(f"Starting parallel MP3 file processing with {max_workers} workers...")
+    
+    # Fase 1: Coletar todos os arquivos MP3
+    print("Phase 1: Collecting MP3 files...")
+    mp3_files = []
+    total_files = 0
+    
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            if file.endswith(".mp3"):
+                mp3_files.append(os.path.join(root, file))
+            total_files += 1
+    
+    print(f"Found {len(mp3_files)} MP3 files out of {total_files} total files")
+    
+    if limit and limit < len(mp3_files):
+        original_count = len(mp3_files)
+        mp3_files = mp3_files[:limit]
+        print(f"⚠️  LIMIT APPLIED: Processing {len(mp3_files)} files (limited from {original_count} total MP3 files)")
+    else:
+        print(f"✅ Processing all {len(mp3_files)} MP3 files found (no limit applied)")
+    
+    if not mp3_files:
+        return []
+    
+    # Fase 2: Processamento paralelo dos metadados
+    print(f"Phase 2: Processing metadata in parallel with {max_workers} workers...")
+    songs = []
+    completed = 0
+    
+    def process_single_file(file_path):
+        """Processa um único arquivo MP3 e retorna seus metadados."""
+        try:
+            metadata = EasyID3(file_path)
+            artist = metadata.get("artist", ["Unknown"])[0]
+            title = metadata.get("title", ["Untitled"])[0]
+            artist = normalize_text(artist)
+            return {"path": file_path, "artist": artist, "title": title}
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            return None
+    
+    # Usar ThreadPoolExecutor para processamento paralelo
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submeter todas as tarefas
+        future_to_file = {executor.submit(process_single_file, file_path): file_path 
+                         for file_path in mp3_files}
+        
+        # Processar resultados conforme completam
+        for future in as_completed(future_to_file):
+            result = future.result()
+            if result:
+                songs.append(result)
+            
+            completed += 1
+            if completed % 100 == 0 or completed == len(mp3_files):
+                print(f"Processed {completed}/{len(mp3_files)} files ({completed/len(mp3_files)*100:.1f}%)")
+    
+    print(f"Parallel processing completed. Total songs processed: {len(songs)}")
     return songs
 
 # Function to group songs by "Artist"
@@ -284,6 +386,65 @@ def copy_or_link_selected_songs(selected_songs, destination, copy_mode=True):
 
     print("Completed processing songs.")
 
+def copy_or_link_selected_songs_parallel(selected_songs, destination, copy_mode=True, max_workers=None):
+    """Copia ou cria atalhos para músicas selecionadas usando processamento paralelo."""
+    if max_workers is None:
+        max_workers = parallel_workers
+    
+    if copy_mode:
+        print(f"Copying selected songs to destination folder (parallel with {max_workers} workers)...")
+    else:
+        print(f"Creating shortcuts for selected songs (parallel with {max_workers} workers)...")
+
+    if not os.path.exists(destination):
+        os.makedirs(destination)
+
+    def process_single_song(song):
+        """Processa uma única música (cópia ou atalho)."""
+        source_path = song["path"]
+        file_name = os.path.basename(source_path)
+        destination_path = os.path.join(destination, file_name)
+
+        try:
+            if copy_mode:
+                shutil.copy2(source_path, destination_path)
+            else:
+                # Normalize path to handle special characters
+                source_path_normalized = normalize_path(source_path)
+                shell = win32com.client.Dispatch("WScript.Shell")
+                shortcut = shell.CreateShortcut(destination_path + ".lnk")
+                shortcut.TargetPath = source_path_normalized
+                shortcut.Save()
+            return True, file_name
+        except Exception as e:
+            return False, f"Failed to process {file_name}: {e}"
+
+    # Usar ThreadPoolExecutor para processamento paralelo
+    completed = 0
+    successful = 0
+    failed = 0
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submeter todas as tarefas
+        future_to_song = {executor.submit(process_single_song, song): song 
+                         for song in selected_songs}
+        
+        # Processar resultados conforme completam
+        for future in as_completed(future_to_song):
+            success, result = future.result()
+            completed += 1
+            
+            if success:
+                successful += 1
+            else:
+                failed += 1
+                print(result)
+            
+            if completed % 10 == 0 or completed == len(selected_songs):
+                print(f"Processed {completed}/{len(selected_songs)} songs ({completed/len(selected_songs)*100:.1f}%) - Success: {successful}, Failed: {failed}")
+
+    print(f"Parallel processing completed. Success: {successful}, Failed: {failed}")
+
 # Execute the program
 print("Starting the song selection program...")
 songs = list_mp3_files_with_cache(music_folder, limit=test_limit)
@@ -300,7 +461,7 @@ if songs:
         limited_songs = selected_songs  # Ignore size limitation for shortcut creation
     
     if limited_songs:
-        copy_or_link_selected_songs(limited_songs, destination_folder, copy_mode=copy_mode)
+        copy_or_link_selected_songs_parallel(limited_songs, destination_folder, copy_mode=copy_mode)
     else:
         print("No songs selected within the size limit. Exiting program.")
 else:

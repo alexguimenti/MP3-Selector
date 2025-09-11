@@ -28,6 +28,11 @@ A Python tool to organize and manage your MP3 files by creating custom selection
   - Automatically detects when music folder has been modified
   - Validates cache integrity before use
   - Significantly reduces processing time for subsequent runs
+- **Parallel processing**:
+  - Multi-threaded file scanning and metadata processing
+  - Parallel file copying/creation for faster operations
+  - Configurable number of worker threads
+  - Significant performance improvement for large music libraries
 - Supports two output modes:
   - Copy files to destination folder
   - Create shortcuts (.lnk files)
@@ -86,6 +91,7 @@ All configuration is done through the graphical interface:
 - **Mode**: Choose between copying files or creating shortcuts
 - **Use Cache**: Enable/disable the caching system
 - **Force Rescan**: Bypass cache and perform full scan
+- **Parallel Workers**: Number of threads for parallel processing (default: 4)
 
 ### Command Line Version
 Edit the following variables in the scripts to customize behavior:
@@ -101,6 +107,7 @@ max_size_gb = 7                              # Size limit in GB
 copy_mode = True                             # True=copy, False=shortcuts
 use_cache = True                             # Enable caching system
 force_rescan = False                         # Force full rescan
+parallel_workers = 4                         # Number of parallel threads
 ```
 
 ## How it Works

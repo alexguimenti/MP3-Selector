@@ -3,6 +3,7 @@ import shutil
 import threading
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tkinter import Tk, Label, Entry, Button, StringVar, IntVar, filedialog, messagebox, Radiobutton, Frame, ttk, Checkbutton
 from mutagen.easyid3 import EasyID3
 from collections import defaultdict
@@ -181,6 +182,95 @@ def list_mp3_files(folder_path, progress_var, status_label, root, limit=None):
     print(f"Número de arquivos MP3 encontrados: {len(mp3_files)}")
     return mp3_files
 
+def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit=None, max_workers=4):
+    """Lista todos os arquivos MP3 em uma pasta especificada usando paralelização."""
+    global stop_flag
+    print(f"Listando arquivos MP3 na pasta (PARALELO): {folder_path}")
+    
+    # Primeiro, coleta todos os arquivos MP3
+    mp3_files = []
+    total_folders, total_files = count_folders_and_files(folder_path)
+    processed_folders = 0
+    processed_files = 0
+
+    print("Fase 1: Coletando arquivos MP3...")
+    for root_dir, _, files in os.walk(folder_path):
+        if stop_flag:
+            break
+        for file in files:
+            if stop_flag:
+                break
+            if file.lower().endswith('.mp3'):
+                mp3_files.append(os.path.join(root_dir, file))
+            processed_files += 1
+            progress_var.set((processed_files / total_files) * 50)  # 50% para coleta
+            status_label.config(text=f"Coletando arquivos... ({processed_files}/{total_files})")
+            root.update_idletasks()
+        processed_folders += 1
+        status_label.config(text=f"Coletando pastas... ({processed_folders}/{total_folders})")
+        root.update_idletasks()
+
+    if stop_flag:
+        return []
+
+    if limit:
+        mp3_files = mp3_files[:limit]
+    
+    print(f"Arquivos MP3 encontrados: {len(mp3_files)}")
+    
+    if not mp3_files:
+        return mp3_files
+
+    # Fase 2: Processamento paralelo dos metadados
+    print("Fase 2: Processando metadados em paralelo...")
+    songs_with_metadata = []
+    completed = 0
+    
+    def process_single_file(file_path):
+        """Processa um único arquivo MP3 e retorna seus metadados."""
+        if stop_flag:
+            return None
+        try:
+            audio = EasyID3(file_path)
+            artist = audio.get('artist', ['Unknown'])[0]
+            title = audio.get('title', ['Untitled'])[0]
+            return {
+                "path": file_path,
+                "artist": artist.lower(),
+                "title": title
+            }
+        except Exception as e:
+            print(f"Erro ao processar {file_path}: {e}")
+            return {
+                "path": file_path,
+                "artist": "unknown",
+                "title": "untitled"
+            }
+    
+    # Usar ThreadPoolExecutor para processamento paralelo
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submeter todas as tarefas
+        future_to_file = {executor.submit(process_single_file, file_path): file_path 
+                         for file_path in mp3_files}
+        
+        # Processar resultados conforme completam
+        for future in as_completed(future_to_file):
+            if stop_flag:
+                break
+                
+            result = future.result()
+            if result:
+                songs_with_metadata.append(result)
+            
+            completed += 1
+            progress = 50 + (completed / len(mp3_files)) * 50  # 50-100% para processamento
+            progress_var.set(progress)
+            status_label.config(text=f"Processando metadados... ({completed}/{len(mp3_files)})")
+            root.update_idletasks()
+    
+    print(f"Processamento paralelo concluído: {len(songs_with_metadata)} arquivos processados")
+    return [song["path"] for song in songs_with_metadata]
+
 def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, limit=None):
     """Lista arquivos MP3 usando cache quando possível."""
     global stop_flag
@@ -214,7 +304,7 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
     # Se não há cache válido, faz varredura completa
     status_label.config(text="Realizando varredura completa...")
     root.update_idletasks()
-    mp3_files = list_mp3_files(folder_path, progress_var, status_label, root, limit)
+    mp3_files = list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit)
     
     # Salva no cache para próximas execuções
     if mp3_files and use_cache.get():
@@ -417,6 +507,7 @@ max_size_gb = IntVar(value=10)
 copy_mode = IntVar(value=1)
 use_cache = IntVar(value=1)  # Usar cache por padrão
 force_rescan = IntVar(value=0)  # Não forçar rescan por padrão
+parallel_workers = IntVar(value=4)  # Número de threads paralelas
 progress_var = IntVar(value=0)
 overall_progress_var = IntVar(value=0)
 
