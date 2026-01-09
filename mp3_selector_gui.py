@@ -178,11 +178,11 @@ def list_mp3_files(folder_path, progress_var, status_label, root, limit=None):
                 mp3_files.append(os.path.join(root_dir, file))
             processed_files += 1
             progress_var.set((processed_files / total_files) * 100)
-            status_label.config(text=f"Escaneando arquivos... ({processed_files}/{total_files})")
-            root.update_idletasks()  # Força a atualização da interface gráfica
+            status_label.config(text=f"Scanning files... ({processed_files}/{total_files})")
+            root.update_idletasks()  # Forces update of the GUI
         processed_folders += 1
-        status_label.config(text=f"Escaneando pastas... ({processed_folders}/{total_folders})")
-        root.update_idletasks()  # Força a atualização da interface gráfica
+        status_label.config(text=f"Scanning folders... ({processed_folders}/{total_folders})")
+        root.update_idletasks()  # Forces update of the GUI
 
     if limit:
         mp3_files = mp3_files[:limit]
@@ -210,11 +210,11 @@ def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit
             if file.lower().endswith('.mp3'):
                 mp3_files.append(os.path.join(root_dir, file))
             processed_files += 1
-            progress_var.set((processed_files / total_files) * 50)  # 50% para coleta
-            status_label.config(text=f"Coletando arquivos... ({processed_files}/{total_files})")
+            progress_var.set((processed_files / total_files) * 50)  # 50% for collection
+            status_label.config(text=f"Collecting files... ({processed_files}/{total_files})")
             root.update_idletasks()
         processed_folders += 1
-        status_label.config(text=f"Coletando pastas... ({processed_folders}/{total_folders})")
+        status_label.config(text=f"Collecting folders... ({processed_folders}/{total_folders})")
         root.update_idletasks()
 
     if stop_flag:
@@ -270,9 +270,9 @@ def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit
                 songs_with_metadata.append(result)
             
             completed += 1
-            progress = 50 + (completed / len(mp3_files)) * 50  # 50-100% para processamento
+            progress = 50 + (completed / len(mp3_files)) * 50  # 50-100% for processing
             progress_var.set(progress)
-            status_label.config(text=f"Processando metadados... ({completed}/{len(mp3_files)})")
+            status_label.config(text=f"Processing metadata... ({completed}/{len(mp3_files)})")
             root.update_idletasks()
     
     print(f"Processamento paralelo concluído: {len(songs_with_metadata)} arquivos processados")
@@ -289,8 +289,8 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
     
     # Tenta carregar do cache primeiro
     if use_cache.get() and not force_rescan.get():
-        print("Tentando carregar do cache...")
-        status_label.config(text="Tentando carregar do cache...")
+        print("Attempting to load from cache...")
+        status_label.config(text="Attempting to load from cache...")
         root.update_idletasks()
         
         manual_path = manual_cache_path.get()
@@ -302,7 +302,7 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
             if limit:
                 mp3_files = mp3_files[:limit]
             progress_var.set(100)
-            status_label.config(text=f"Cache carregado: {len(mp3_files)} arquivos")
+            status_label.config(text=f"Cache loaded: {len(mp3_files)} files")
             root.update_idletasks()
             return mp3_files
         else:
@@ -310,8 +310,8 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
     else:
         print("Cache desabilitado ou forçando rescan, fazendo varredura completa...")
     
-    # Se não há cache válido, faz varredura completa
-    status_label.config(text="Realizando varredura completa...")
+    # If no valid cache, perform full scan
+    status_label.config(text="Performing full scan...")
     root.update_idletasks()
     mp3_files = list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit)
     
@@ -403,10 +403,10 @@ def copy_or_link_selected_songs(songs, destination_folder, progress_var, status_
         else:
             os.symlink(song, destination_path)
         progress_var.set((i + 1) / total_songs * 100)
-        status_label.config(text=f"Processando {i + 1} de {total_songs} músicas...")
-        root.update_idletasks()  # Força a atualização da interface gráfica
-    print("Processo de cópia/conexão concluído.")
-    status_label.config(text="Processo concluído.")
+        status_label.config(text=f"Processing {i + 1} of {total_songs} songs...")
+        root.update_idletasks()  # Forces update of the GUI
+    print("Copy/link process completed.")
+    status_label.config(text="Process completed.")
 
 # Funções auxiliares para a interface gráfica
 def select_music_folder():
@@ -442,8 +442,8 @@ def start_process(root):
         print(f"Tamanho máximo (GB): {max_size_gb_value}")
         print(f"Modo de cópia: {'Copiar' if copy_mode_value else 'Criar Atalhos'}")
 
-        # Etapa 1: Escaneamento dos arquivos MP3
-        status_label.config(text="Iniciando escaneamento dos arquivos MP3...")
+        # Step 1: Scanning MP3 files
+        status_label.config(text="Starting MP3 file scan...")
         root.update_idletasks()
         songs = list_mp3_files_with_cache(music_folder_path, progress_var, status_label, root, limit=test_limit_value)
         print(f"Número de músicas encontradas: {len(songs)}")
@@ -454,8 +454,8 @@ def start_process(root):
             raise Exception("Processo interrompido pelo usuário.")
 
         if songs:
-            # Etapa 2: Agrupamento e seleção de músicas
-            status_label.config(text="Agrupando e selecionando músicas...")
+            # Step 2: Grouping and selecting songs
+            status_label.config(text="Grouping and selecting songs...")
             root.update_idletasks()
             groups_by_artist = group_by_artist(songs)
             selected_songs = select_songs_based_on_artist_count(groups_by_artist, songs_per_artist_value)
@@ -470,22 +470,22 @@ def start_process(root):
                 raise Exception("Processo interrompido pelo usuário.")
 
             if limited_songs:
-                # Etapa 3: Cópia ou criação de atalhos dos arquivos selecionados
-                status_label.config(text="Copiando ou criando atalhos das músicas selecionadas...")
+                # Step 3: Copying or creating shortcuts for selected files
+                status_label.config(text="Copying or creating shortcuts for selected songs...")
                 root.update_idletasks()
                 copy_or_link_selected_songs(limited_songs, destination_folder_path, progress_var, status_label, root, copy_mode=copy_mode_value)
-                overall_progress_var.set(100)  # Atualiza o progresso geral para 100%
+                overall_progress_var.set(100)  # Update overall progress to 100%
                 root.update_idletasks()
                 if stop_flag:
-                    raise Exception("Processo interrompido pelo usuário.")
-                messagebox.showinfo("Sucesso", "Processo concluído com sucesso!")
+                    raise Exception("Process interrupted by user.")
+                messagebox.showinfo("Success", "Process completed successfully!")
             else:
-                messagebox.showwarning("Aviso", "Nenhuma música selecionada dentro do limite de tamanho.")
+                messagebox.showwarning("Warning", "No songs selected within the size limit.")
         else:
-            messagebox.showwarning("Aviso", "Nenhum arquivo MP3 encontrado na pasta especificada.")
+            messagebox.showwarning("Warning", "No MP3 files found in the specified folder.")
     except Exception as e:
-        print(f"Erro: {e}")
-        messagebox.showerror("Erro", f"Ocorreu um erro: {e}")
+        print(f"Error: {e}")
+        messagebox.showerror("Error", f"An error occurred: {e}")
     finally:
         start_button.config(state='normal')
         stop_button.config(state='disabled')
@@ -503,14 +503,14 @@ def start_process_thread():
 def stop_process():
     global stop_flag
     stop_flag = True
-    print("Processo interrompido pelo usuário.")
-    status_label.config(text="Processo interrompido pelo usuário.")
+    print("Process interrupted by user.")
+    status_label.config(text="Process interrupted by user.")
     root.update_idletasks()
 
-# Criação da interface gráfica
+# GUI Creation
 root = Tk()
-root.title("Seleção de Músicas MP3")
-root.geometry("600x500")
+root.title("MP3 Music Selector")
+root.geometry("600x530")
 root.configure(bg="#f0f4f7")
 
 # Variáveis para armazenar os valores dos campos de entrada
@@ -531,40 +531,40 @@ overall_progress_var = IntVar(value=0)
 frame = Frame(root, padx=10, pady=10, bg="#f0f4f7")
 frame.pack(fill='both', expand=True)
 
-Label(frame, text="Pasta de Músicas:", bg="#f0f4f7").grid(row=0, column=0, sticky='e')
+Label(frame, text="Music Folder:", bg="#f0f4f7").grid(row=0, column=0, sticky='e')
 Entry(frame, textvariable=music_folder, width=50).grid(row=0, column=1)
-Button(frame, text="Selecionar", command=select_music_folder, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=0, column=2)
+Button(frame, text="Select", command=select_music_folder, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=0, column=2)
 
-Label(frame, text="Pasta de Destino:", bg="#f0f4f7").grid(row=1, column=0, sticky='e')
+Label(frame, text="Destination Folder:", bg="#f0f4f7").grid(row=1, column=0, sticky='e')
 Entry(frame, textvariable=destination_folder, width=50).grid(row=1, column=1)
-Button(frame, text="Selecionar", command=select_destination_folder, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=1, column=2)
+Button(frame, text="Select", command=select_destination_folder, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=1, column=2)
 
-Label(frame, text="Limite de Arquivos:", bg="#f0f4f7").grid(row=2, column=0, sticky='e')
+Label(frame, text="File Limit:", bg="#f0f4f7").grid(row=2, column=0, sticky='e')
 Entry(frame, textvariable=test_limit).grid(row=2, column=1)
 
-Label(frame, text="Músicas por Artista:", bg="#f0f4f7").grid(row=3, column=0, sticky='e')
+Label(frame, text="Songs per Artist:", bg="#f0f4f7").grid(row=3, column=0, sticky='e')
 Entry(frame, textvariable=songs_per_artist).grid(row=3, column=1)
 
-Label(frame, text="Tamanho Máximo (GB):", bg="#f0f4f7").grid(row=4, column=0, sticky='e')
+Label(frame, text="Max Size (GB):", bg="#f0f4f7").grid(row=4, column=0, sticky='e')
 Entry(frame, textvariable=max_size_gb).grid(row=4, column=1)
 
-Label(frame, text="Modo:", bg="#f0f4f7").grid(row=5, column=0, sticky='e')
-Radiobutton(frame, text="Copiar", variable=copy_mode, value=1, bg="#f0f4f7").grid(row=5, column=1, sticky='w')
-Radiobutton(frame, text="Criar Atalhos", variable=copy_mode, value=0, bg="#f0f4f7").grid(row=5, column=1, sticky='e')
+Label(frame, text="Mode:", bg="#f0f4f7").grid(row=5, column=0, sticky='e')
+Radiobutton(frame, text="Copy", variable=copy_mode, value=1, bg="#f0f4f7").grid(row=5, column=1, sticky='w')
+Radiobutton(frame, text="Create Shortcuts", variable=copy_mode, value=0, bg="#f0f4f7").grid(row=5, column=1, sticky='e')
 
-# Controles de cache
+# Cache controls
 Label(frame, text="Cache:", bg="#f0f4f7").grid(row=6, column=0, sticky='e')
-Checkbutton(frame, text="Usar Cache", variable=use_cache, bg="#f0f4f7").grid(row=6, column=1, sticky='w')
-Checkbutton(frame, text="Forçar Rescan", variable=force_rescan, bg="#f0f4f7").grid(row=6, column=2, sticky='w')
+Checkbutton(frame, text="Use Cache", variable=use_cache, bg="#f0f4f7").grid(row=6, column=1, sticky='w')
+Checkbutton(frame, text="Force Rescan", variable=force_rescan, bg="#f0f4f7").grid(row=6, column=2, sticky='w')
 
-Label(frame, text="Cache Manual:", bg="#f0f4f7").grid(row=7, column=0, sticky='e')
+Label(frame, text="Manual Cache:", bg="#f0f4f7").grid(row=7, column=0, sticky='e')
 Entry(frame, textvariable=manual_cache_path, width=50).grid(row=7, column=1)
-Button(frame, text="Procurar", command=select_manual_cache_file, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=7, column=2)
+Button(frame, text="Browse", command=select_manual_cache_file, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=7, column=2)
 
-start_button = Button(frame, text="Iniciar", command=start_process_thread, bg="#b5d1f0", activebackground="#a4c4e8")
+start_button = Button(frame, text="Start", command=start_process_thread, bg="#b5d1f0", activebackground="#a4c4e8")
 start_button.grid(row=8, column=0, columnspan=2, pady=10)
 
-stop_button = Button(frame, text="Parar", command=stop_process, bg="#f0b5b5", activebackground="#f0a4a4", state='disabled')
+stop_button = Button(frame, text="Stop", command=stop_process, bg="#f0b5b5", activebackground="#f0a4a4", state='disabled')
 stop_button.grid(row=8, column=2, pady=10)
 
 progress = ttk.Progressbar(frame, orient="horizontal", length=400, mode="determinate", variable=progress_var)
