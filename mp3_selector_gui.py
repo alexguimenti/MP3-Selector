@@ -91,10 +91,14 @@ def save_cache(songs, music_folder):
         traceback.print_exc()
         return False
 
-def load_cache(music_folder):
+def load_cache(music_folder, manual_path=None):
     """Carrega a lista de músicas do cache se disponível e válido."""
     try:
-        cache_file = get_cache_filename(music_folder)
+        if manual_path and os.path.exists(manual_path):
+            cache_file = manual_path
+            print(f"Usando arquivo de cache manual: {cache_file}")
+        else:
+            cache_file = get_cache_filename(music_folder)
         
         if not os.path.exists(cache_file):
             print("Arquivo de cache não encontrado.")
@@ -103,20 +107,22 @@ def load_cache(music_folder):
         with open(cache_file, 'r', encoding='utf-8') as f:
             cache_data = json.load(f)
         
-        # Verifica se o cache é para a mesma pasta
-        if cache_data.get("music_folder") != music_folder:
-            print("Cache é para uma pasta diferente.")
-            return None
-        
-        # Verifica se a pasta foi modificada desde o cache
-        current_mod_time = get_folder_modification_time(music_folder)
-        cached_mod_time = cache_data.get("folder_mod_time", 0)
-        
-        if current_mod_time > cached_mod_time:
-            print("Pasta de música foi modificada desde o último cache.")
-            print(f"Cache: {time.ctime(cached_mod_time)}")
-            print(f"Atual: {time.ctime(current_mod_time)}")
-            return None
+        # Se NÃO for manual, faz as validações automáticas de pasta e tempo
+        if not manual_path:
+            # Verifica se o cache é para a mesma pasta
+            if cache_data.get("music_folder") != music_folder:
+                print("Cache é para uma pasta diferente.")
+                return None
+            
+            # Verifica se a pasta foi modificada desde o cache
+            current_mod_time = get_folder_modification_time(music_folder)
+            cached_mod_time = cache_data.get("folder_mod_time", 0)
+            
+            if current_mod_time > cached_mod_time:
+                print("Pasta de música foi modificada desde o último cache.")
+                print(f"Cache: {time.ctime(cached_mod_time)}")
+                print(f"Atual: {time.ctime(current_mod_time)}")
+                return None
         
         # Verifica se os arquivos ainda existem
         songs = cache_data.get("songs", [])
@@ -129,7 +135,8 @@ def load_cache(music_folder):
         
         if len(valid_songs) != len(songs):
             print(f"Cache parcialmente inválido: {len(songs) - len(valid_songs)} arquivos removidos.")
-            return None
+            if not manual_path: # Se for automático, invalida. Se for manual, usa o que sobrou.
+                return None
         
         cache_age = time.time() - cache_data.get("timestamp", 0)
         print(f"Cache carregado com sucesso!")
@@ -285,7 +292,9 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
         print("Tentando carregar do cache...")
         status_label.config(text="Tentando carregar do cache...")
         root.update_idletasks()
-        cached_songs = load_cache(folder_path)
+        
+        manual_path = manual_cache_path.get()
+        cached_songs = load_cache(folder_path, manual_path=manual_path if manual_path else None)
         if cached_songs:
             print(f"Cache carregado com sucesso: {len(cached_songs)} músicas")
             # Converte para formato esperado (lista de paths)
@@ -408,6 +417,12 @@ def select_destination_folder():
     folder_selected = filedialog.askdirectory()
     destination_folder.set(folder_selected)
 
+def select_manual_cache_file():
+    file_selected = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
+    if file_selected:
+        manual_cache_path.set(file_selected)
+        use_cache.set(1) # Ativa o uso de cache automaticamente ao selecionar um arquivo
+
 def start_process(root):
     global stop_flag
     stop_flag = False
@@ -507,6 +522,7 @@ max_size_gb = IntVar(value=10)
 copy_mode = IntVar(value=1)
 use_cache = IntVar(value=1)  # Usar cache por padrão
 force_rescan = IntVar(value=0)  # Não forçar rescan por padrão
+manual_cache_path = StringVar()
 parallel_workers = IntVar(value=4)  # Número de threads paralelas
 progress_var = IntVar(value=0)
 overall_progress_var = IntVar(value=0)
@@ -541,19 +557,23 @@ Label(frame, text="Cache:", bg="#f0f4f7").grid(row=6, column=0, sticky='e')
 Checkbutton(frame, text="Usar Cache", variable=use_cache, bg="#f0f4f7").grid(row=6, column=1, sticky='w')
 Checkbutton(frame, text="Forçar Rescan", variable=force_rescan, bg="#f0f4f7").grid(row=6, column=2, sticky='w')
 
+Label(frame, text="Cache Manual:", bg="#f0f4f7").grid(row=7, column=0, sticky='e')
+Entry(frame, textvariable=manual_cache_path, width=50).grid(row=7, column=1)
+Button(frame, text="Procurar", command=select_manual_cache_file, bg="#d9e4f5", activebackground="#c3d3ef").grid(row=7, column=2)
+
 start_button = Button(frame, text="Iniciar", command=start_process_thread, bg="#b5d1f0", activebackground="#a4c4e8")
-start_button.grid(row=7, column=0, columnspan=2, pady=10)
+start_button.grid(row=8, column=0, columnspan=2, pady=10)
 
 stop_button = Button(frame, text="Parar", command=stop_process, bg="#f0b5b5", activebackground="#f0a4a4", state='disabled')
-stop_button.grid(row=7, column=2, pady=10)
+stop_button.grid(row=8, column=2, pady=10)
 
 progress = ttk.Progressbar(frame, orient="horizontal", length=400, mode="determinate", variable=progress_var)
-progress.grid(row=8, column=0, columnspan=3, pady=10)
+progress.grid(row=9, column=0, columnspan=3, pady=10)
 
 overall_progress = ttk.Progressbar(frame, orient="horizontal", length=400, mode="determinate", variable=overall_progress_var)
-overall_progress.grid(row=9, column=0, columnspan=3, pady=10)
+overall_progress.grid(row=10, column=0, columnspan=3, pady=10)
 
 status_label = Label(frame, text="", bg="#f0f4f7")
-status_label.grid(row=10, column=0, columnspan=3)
+status_label.grid(row=11, column=0, columnspan=3)
 
 root.mainloop()
