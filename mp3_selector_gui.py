@@ -296,15 +296,15 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
         manual_path = manual_cache_path.get()
         cached_songs = load_cache(folder_path, manual_path=manual_path if manual_path else None)
         if cached_songs:
-            print(f"Cache carregado com sucesso: {len(cached_songs)} músicas")
-            # Converte para formato esperado (lista de paths)
-            mp3_files = [song["path"] for song in cached_songs]
+            print(f"Cache loaded successfully: {len(cached_songs)} songs")
+            # Return full metadata objects
+            mp3_files_with_metadata = cached_songs
             if limit:
-                mp3_files = mp3_files[:limit]
+                mp3_files_with_metadata = mp3_files_with_metadata[:limit]
             progress_var.set(100)
-            status_label.config(text=f"Cache loaded: {len(mp3_files)} files")
+            status_label.config(text=f"Cache loaded: {len(mp3_files_with_metadata)} files")
             root.update_idletasks()
-            return mp3_files
+            return mp3_files_with_metadata
         else:
             print("Cache not found or invalid, performing full scan...")
     else:
@@ -323,22 +323,18 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
     else:
         print("Cache disabled or no songs found, not saving cache.")
     
-    # Returns only paths to maintain compatibility with the rest of the script
-    return [song["path"] for song in songs_with_metadata]
+    return songs_with_metadata
 
-def group_by_artist(mp3_files):
-    """Groups MP3 files by artist."""
-    print("Grouping MP3 files by artist...")
+def group_by_artist(songs_with_metadata):
+    """Groups songs by artist using metadata already in memory."""
+    print("Grouping songs by artist...")
     groups = defaultdict(list)
-    for file in mp3_files:
+    for song in songs_with_metadata:
         if stop_flag:
             break
-        try:
-            audio = EasyID3(file)
-            artist = audio['artist'][0]
-            groups[artist].append(file)
-        except Exception as e:
-            print(f"Error reading metadata from file {file}: {e}")
+        # Use the artist already present in the metadata
+        artist = song.get('artist', 'unknown')
+        groups[artist].append(song)
     print(f"Number of artists found: {len(groups)}")
     return groups
 
@@ -361,12 +357,17 @@ def limit_songs_by_size(selected_songs, max_size_bytes):
     for song in selected_songs:
         if stop_flag:
             break
-        song_size = os.path.getsize(song)
-        if total_size + song_size <= max_size_bytes:
-            limited_songs.append(song)
-            total_size += song_size
-        else:
-            break
+        # Get path from song dictionary
+        file_path = song["path"]
+        try:
+            song_size = os.path.getsize(file_path)
+            if total_size + song_size <= max_size_bytes:
+                limited_songs.append(song)
+                total_size += song_size
+            else:
+                break
+        except:
+            continue
     print(f"Number of songs after size limitation: {len(limited_songs)}")
     return limited_songs
 
@@ -380,11 +381,12 @@ def copy_or_link_selected_songs(songs, destination_folder, progress_var, status_
     for i, song in enumerate(songs):
         if stop_flag:
             break
-        destination_path = os.path.join(destination_folder, os.path.basename(song))
+        file_path = song["path"]
+        destination_path = os.path.join(destination_folder, os.path.basename(file_path))
         if copy_mode:
-            shutil.copy2(song, destination_path)
+            shutil.copy2(file_path, destination_path)
         else:
-            os.symlink(song, destination_path)
+            os.symlink(file_path, destination_path)
         progress_var.set((i + 1) / total_songs * 100)
         status_label.config(text=f"Processing {i + 1} of {total_songs} songs...")
         root.update_idletasks()  # Forces update of the GUI
