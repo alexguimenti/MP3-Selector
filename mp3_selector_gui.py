@@ -53,11 +53,11 @@ def save_cache(songs, music_folder):
         print(f"cache_folder: {cache_folder}")
         
         if not os.path.exists(cache_folder):
-            print("Criando pasta cache...")
+            print("Creating cache folder...")
             os.makedirs(cache_folder)
-            print("Pasta cache criada!")
+            print("Cache folder created!")
         else:
-            print("Pasta cache já existe!")
+            print("Cache folder already exists!")
         
         cache_data = {
             "timestamp": time.time(),
@@ -70,19 +70,19 @@ def save_cache(songs, music_folder):
         cache_file = get_cache_filename(music_folder)
         print(f"cache_file: {cache_file}")
         
-        print("Escrevendo arquivo de cache...")
+        print("Writing cache file...")
         with open(cache_file, 'w', encoding='utf-8') as f:
             json.dump(cache_data, f, ensure_ascii=False, indent=2)
         
         print(f"✅ Cache salvo com sucesso: {cache_file}")
         print(f"Total de músicas em cache: {len(songs)}")
         
-        # Verificar se o arquivo foi realmente criado
+        # Verify if file was actually created
         if os.path.exists(cache_file):
             file_size = os.path.getsize(cache_file)
-            print(f"Arquivo criado com sucesso! Tamanho: {file_size} bytes")
+            print(f"File created successfully! Size: {file_size} bytes")
         else:
-            print("❌ ERRO: Arquivo não foi criado!")
+            print("❌ ERROR: File was not created!")
         
         return True
     except Exception as e:
@@ -92,16 +92,16 @@ def save_cache(songs, music_folder):
         return False
 
 def load_cache(music_folder, manual_path=None):
-    """Carrega a lista de músicas do cache se disponível e válido."""
+    """Loads the music list from cache if available and valid."""
     try:
         if manual_path and os.path.exists(manual_path):
             cache_file = manual_path
-            print(f"Usando arquivo de cache manual: {cache_file}")
+            print(f"Using manual cache file: {cache_file}")
         else:
             cache_file = get_cache_filename(music_folder)
         
         if not os.path.exists(cache_file):
-            print("Arquivo de cache não encontrado.")
+            print("Cache file not found.")
             return None
         
         with open(cache_file, 'r', encoding='utf-8') as f:
@@ -109,45 +109,45 @@ def load_cache(music_folder, manual_path=None):
         
         # Se NÃO for manual, faz as validações automáticas de pasta e tempo
         if not manual_path:
-            # Verifica se o cache é para a mesma pasta
+            # Verify if cache is for the same folder
             if cache_data.get("music_folder") != music_folder:
-                print("Cache é para uma pasta diferente.")
+                print("Cache is for a different folder.")
                 return None
             
-            # Verifica se a pasta foi modificada desde o cache
+            # Verify if folder was modified since cache
             current_mod_time = get_folder_modification_time(music_folder)
             cached_mod_time = cache_data.get("folder_mod_time", 0)
             
             if current_mod_time > cached_mod_time:
-                print("Pasta de música foi modificada desde o último cache.")
+                print("Music folder has been modified since last cache.")
                 print(f"Cache: {time.ctime(cached_mod_time)}")
-                print(f"Atual: {time.ctime(current_mod_time)}")
+                print(f"Current: {time.ctime(current_mod_time)}")
                 return None
         
-        # Verifica se os arquivos ainda existem
+        # Verify if files still exist
         songs = cache_data.get("songs", [])
         valid_songs = []
         
-        print("Verificando integridade do cache...")
+        print("Checking cache integrity...")
         for song in songs:
             if os.path.exists(song["path"]):
                 valid_songs.append(song)
         
         if len(valid_songs) != len(songs):
-            print(f"Cache parcialmente inválido: {len(songs) - len(valid_songs)} arquivos removidos.")
-            if not manual_path: # Se for automático, invalida. Se for manual, usa o que sobrou.
+            print(f"Cache partially invalid: {len(songs) - len(valid_songs)} files removed.")
+            if not manual_path: # If automatic, invalidate. If manual, use what's left.
                 return None
         
         cache_age = time.time() - cache_data.get("timestamp", 0)
-        print(f"Cache carregado com sucesso!")
-        print(f"Data do cache: {time.ctime(cache_data.get('timestamp', 0))}")
-        print(f"Idade do cache: {cache_age / 3600:.1f} horas")
-        print(f"Total de músicas: {len(valid_songs)}")
+        print(f"Cache loaded successfully!")
+        print(f"Cache date: {time.ctime(cache_data.get('timestamp', 0))}")
+        print(f"Cache age: {cache_age / 3600:.1f} hours")
+        print(f"Total songs: {len(valid_songs)}")
         
         return valid_songs
         
     except Exception as e:
-        print(f"Erro ao carregar cache: {e}")
+        print(f"Error loading cache: {e}")
         return None
 
 def count_folders_and_files(folder_path):
@@ -189,18 +189,17 @@ def list_mp3_files(folder_path, progress_var, status_label, root, limit=None):
     print(f"Número de arquivos MP3 encontrados: {len(mp3_files)}")
     return mp3_files
 
-def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit=None, max_workers=4):
+def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit=None, max_workers=20):
     """Lista todos os arquivos MP3 em uma pasta especificada usando paralelização."""
     global stop_flag
-    print(f"Listando arquivos MP3 na pasta (PARALELO): {folder_path}")
+    print(f"Listing MP3 files in folder (PARALLEL): {folder_path}")
     
-    # Primeiro, coleta todos os arquivos MP3
+    # Phase 1: Collecting MP3 files
     mp3_files = []
-    total_folders, total_files = count_folders_and_files(folder_path)
-    processed_folders = 0
     processed_files = 0
-
-    print("Fase 1: Coletando arquivos MP3...")
+    print("Phase 1: Collecting MP3 files...")
+    
+    # Combined walk to avoid double scanning disk
     for root_dir, _, files in os.walk(folder_path):
         if stop_flag:
             break
@@ -209,13 +208,12 @@ def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit
                 break
             if file.lower().endswith('.mp3'):
                 mp3_files.append(os.path.join(root_dir, file))
+            
             processed_files += 1
-            progress_var.set((processed_files / total_files) * 50)  # 50% for collection
-            status_label.config(text=f"Collecting files... ({processed_files}/{total_files})")
-            root.update_idletasks()
-        processed_folders += 1
-        status_label.config(text=f"Collecting folders... ({processed_folders}/{total_folders})")
-        root.update_idletasks()
+            # Update UI only every 1000 files to avoid overhead
+            if processed_files % 1000 == 0:
+                status_label.config(text=f"Searching... {len(mp3_files)} MP3s found ({processed_files} total files)")
+                root.update_idletasks()
 
     if stop_flag:
         return []
@@ -223,13 +221,13 @@ def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit
     if limit:
         mp3_files = mp3_files[:limit]
     
-    print(f"Arquivos MP3 encontrados: {len(mp3_files)}")
+    print(f"MP3 files found: {len(mp3_files)}")
     
     if not mp3_files:
         return mp3_files
 
-    # Fase 2: Processamento paralelo dos metadados
-    print("Fase 2: Processando metadados em paralelo...")
+    # Phase 2: Parallel processing of metadata
+    print("Phase 2: Processing metadata in parallel...")
     songs_with_metadata = []
     completed = 0
     
@@ -270,13 +268,15 @@ def list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit
                 songs_with_metadata.append(result)
             
             completed += 1
-            progress = 50 + (completed / len(mp3_files)) * 50  # 50-100% for processing
-            progress_var.set(progress)
-            status_label.config(text=f"Processing metadata... ({completed}/{len(mp3_files)})")
-            root.update_idletasks()
+            # Optimization: Update UI only every 100 files in Phase 2
+            if completed % 100 == 0 or completed == len(mp3_files):
+                progress = 50 + (completed / len(mp3_files)) * 50
+                progress_var.set(progress)
+                status_label.config(text=f"Processing metadata... ({completed}/{len(mp3_files)})")
+                root.update_idletasks()
     
-    print(f"Processamento paralelo concluído: {len(songs_with_metadata)} arquivos processados")
-    return [song["path"] for song in songs_with_metadata]
+    print(f"Parallel processing complete: {len(songs_with_metadata)} files processed")
+    return songs_with_metadata
 
 def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, limit=None):
     """Lista arquivos MP3 usando cache quando possível."""
@@ -306,46 +306,29 @@ def list_mp3_files_with_cache(folder_path, progress_var, status_label, root, lim
             root.update_idletasks()
             return mp3_files
         else:
-            print("Cache não encontrado ou inválido, fazendo varredura completa...")
+            print("Cache not found or invalid, performing full scan...")
     else:
-        print("Cache desabilitado ou forçando rescan, fazendo varredura completa...")
+        print("Cache disabled or forcing rescan, performing full scan...")
     
     # If no valid cache, perform full scan
     status_label.config(text="Performing full scan...")
     root.update_idletasks()
-    mp3_files = list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit)
+    # Now it returns the full objects with metadata
+    songs_with_metadata = list_mp3_files_parallel(folder_path, progress_var, status_label, root, limit)
     
-    # Salva no cache para próximas execuções
-    if mp3_files and use_cache.get():
-        print(f"Salvando {len(mp3_files)} músicas no cache...")
-        # Converte para formato de cache (lista de dicionários com metadados)
-        songs_with_metadata = []
-        for file_path in mp3_files:
-            try:
-                audio = EasyID3(file_path)
-                artist = audio.get('artist', ['Unknown'])[0]
-                title = audio.get('title', ['Untitled'])[0]
-                songs_with_metadata.append({
-                    "path": file_path,
-                    "artist": artist.lower(),
-                    "title": title
-                })
-            except:
-                songs_with_metadata.append({
-                    "path": file_path,
-                    "artist": "unknown",
-                    "title": "untitled"
-                })
-        
+    # Saves to cache for next runs (now it's instant because we already have the metadata!)
+    if songs_with_metadata and (use_cache.get() or only_cache.get()):
+        print(f"Saving {len(songs_with_metadata)} songs to cache...")
         save_cache(songs_with_metadata, folder_path)
     else:
-        print("Cache desabilitado ou nenhuma música encontrada, não salvando cache.")
+        print("Cache disabled or no songs found, not saving cache.")
     
-    return mp3_files
+    # Returns only paths to maintain compatibility with the rest of the script
+    return [song["path"] for song in songs_with_metadata]
 
 def group_by_artist(mp3_files):
-    """Agrupa os arquivos MP3 por artista."""
-    print("Agrupando arquivos MP3 por artista...")
+    """Groups MP3 files by artist."""
+    print("Grouping MP3 files by artist...")
     groups = defaultdict(list)
     for file in mp3_files:
         if stop_flag:
@@ -355,24 +338,24 @@ def group_by_artist(mp3_files):
             artist = audio['artist'][0]
             groups[artist].append(file)
         except Exception as e:
-            print(f"Erro ao ler metadados do arquivo {file}: {e}")
-    print(f"Número de artistas encontrados: {len(groups)}")
+            print(f"Error reading metadata from file {file}: {e}")
+    print(f"Number of artists found: {len(groups)}")
     return groups
 
 def select_songs_based_on_artist_count(groups_by_artist, songs_per_artist):
-    """Seleciona um número específico de músicas por artista."""
-    print(f"Selecionando até {songs_per_artist} músicas por artista...")
+    """Selects a specific number of songs per artist."""
+    print(f"Selecting up to {songs_per_artist} songs per artist...")
     selected_songs = []
     for artist, songs in groups_by_artist.items():
         if stop_flag:
             break
         selected_songs.extend(songs[:songs_per_artist])
-    print(f"Número de músicas selecionadas: {len(selected_songs)}")
+    print(f"Number of songs selected: {len(selected_songs)}")
     return selected_songs
 
 def limit_songs_by_size(selected_songs, max_size_bytes):
-    """Limita a seleção de músicas com base no tamanho total."""
-    print(f"Limitando músicas selecionadas para um total de {max_size_bytes} bytes...")
+    """Limits the selection of songs based on total size."""
+    print(f"Limiting selected songs to a total of {max_size_bytes} bytes...")
     total_size = 0
     limited_songs = []
     for song in selected_songs:
@@ -384,7 +367,7 @@ def limit_songs_by_size(selected_songs, max_size_bytes):
             total_size += song_size
         else:
             break
-    print(f"Número de músicas após limitação por tamanho: {len(limited_songs)}")
+    print(f"Number of songs after size limitation: {len(limited_songs)}")
     return limited_songs
 
 def copy_or_link_selected_songs(songs, destination_folder, progress_var, status_label, root, copy_mode=True):
@@ -435,23 +418,32 @@ def start_process(root):
         max_size_gb_value = max_size_gb.get()
         copy_mode_value = copy_mode.get() == 1
 
-        print(f"Pasta de músicas: {music_folder_path}")
-        print(f"Pasta de destino: {destination_folder_path}")
-        print(f"Limite de arquivos: {test_limit_value}")
-        print(f"Músicas por artista: {songs_per_artist_value}")
-        print(f"Tamanho máximo (GB): {max_size_gb_value}")
-        print(f"Modo de cópia: {'Copiar' if copy_mode_value else 'Criar Atalhos'}")
+        print(f"Music folder: {music_folder_path}")
+        print(f"Destination folder: {destination_folder_path}")
+        print(f"File limit: {test_limit_value}")
+        print(f"Songs per artist: {songs_per_artist_value}")
+        print(f"Max size (GB): {max_size_gb_value}")
+        print(f"Copy mode: {'Copy' if copy_mode_value else 'Create Shortcuts'}")
 
         # Step 1: Scanning MP3 files
         status_label.config(text="Starting MP3 file scan...")
         root.update_idletasks()
         songs = list_mp3_files_with_cache(music_folder_path, progress_var, status_label, root, limit=test_limit_value)
-        print(f"Número de músicas encontradas: {len(songs)}")
-        overall_progress_var.set(33)  # Atualiza o progresso geral para 33%
+        print(f"Number of songs found: {len(songs)}")
+        overall_progress_var.set(33)  # Update overall progress to 33%
         root.update_idletasks()
 
         if stop_flag:
-            raise Exception("Processo interrompido pelo usuário.")
+            raise Exception("Process interrupted by user.")
+
+        if only_cache.get() == 1:
+            if songs:
+                overall_progress_var.set(100)
+                messagebox.showinfo("Success", f"Scanning complete! Cache created/updated with {len(songs)} songs.")
+                return
+            else:
+                messagebox.showwarning("Warning", "No MP3 files found to cache.")
+                return
 
         if songs:
             # Step 2: Grouping and selecting songs
@@ -463,11 +455,11 @@ def start_process(root):
                 limited_songs = limit_songs_by_size(selected_songs, max_size_gb_value * (1024 ** 3))
             else:
                 limited_songs = selected_songs
-            overall_progress_var.set(66)  # Atualiza o progresso geral para 66%
+            overall_progress_var.set(66)  # Update overall progress to 66%
             root.update_idletasks()
 
             if stop_flag:
-                raise Exception("Processo interrompido pelo usuário.")
+                raise Exception("Process interrupted by user.")
 
             if limited_songs:
                 # Step 3: Copying or creating shortcuts for selected files
@@ -492,13 +484,13 @@ def start_process(root):
         status_label.config(text="")
 
 def start_process_thread():
-    print("Iniciando a thread...")
-    status_label.config(text="Iniciando o processo...")
+    print("Starting thread...")
+    status_label.config(text="Starting process...")
     start_button.config(state='disabled')
     stop_button.config(state='normal')
     process_thread = threading.Thread(target=start_process, args=(root,))
     process_thread.start()
-    print("Thread iniciada.")
+    print("Thread started.")
 
 def stop_process():
     global stop_flag
@@ -522,8 +514,9 @@ max_size_gb = IntVar(value=10)
 copy_mode = IntVar(value=1)
 use_cache = IntVar(value=1)  # Usar cache por padrão
 force_rescan = IntVar(value=0)  # Não forçar rescan por padrão
+only_cache = IntVar(value=0)    # Only create cache
 manual_cache_path = StringVar()
-parallel_workers = IntVar(value=4)  # Número de threads paralelas
+parallel_workers = IntVar(value=10)  # Increased default thread count
 progress_var = IntVar(value=0)
 overall_progress_var = IntVar(value=0)
 
@@ -556,6 +549,7 @@ Radiobutton(frame, text="Create Shortcuts", variable=copy_mode, value=0, bg="#f0
 Label(frame, text="Cache:", bg="#f0f4f7").grid(row=6, column=0, sticky='e')
 Checkbutton(frame, text="Use Cache", variable=use_cache, bg="#f0f4f7").grid(row=6, column=1, sticky='w')
 Checkbutton(frame, text="Force Rescan", variable=force_rescan, bg="#f0f4f7").grid(row=6, column=2, sticky='w')
+Checkbutton(frame, text="Only Create Cache", variable=only_cache, bg="#f0f4f7").grid(row=6, column=1, sticky='e')
 
 Label(frame, text="Manual Cache:", bg="#f0f4f7").grid(row=7, column=0, sticky='e')
 Entry(frame, textvariable=manual_cache_path, width=50).grid(row=7, column=1)
