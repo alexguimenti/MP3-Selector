@@ -117,7 +117,7 @@ parallel_workers = 4                         # Number of parallel threads
    - If no cache or cache is outdated, performs a full folder scan
    - Cache is automatically saved after each successful scan
 2. **Metadata Processing**: Reads MP3 metadata to group songs by artist
-3. **Intelligent Selection**: Randomly selects songs while respecting the configured limits
+3. **Intelligent Selection**: Randomly selects songs per artist and shuffles the selection before applying size limits, ensuring a diverse mix across all artists
 4. **Output Generation**: Either copies files or creates shortcuts in the destination folder
 5. **Playlist Creation**: Optionally creates a playlist file with the selected songs
 

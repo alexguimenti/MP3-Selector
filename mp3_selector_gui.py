@@ -1,4 +1,5 @@
 import os
+import random
 import shutil
 import threading
 import json
@@ -345,13 +346,17 @@ def select_songs_based_on_artist_count(groups_by_artist, songs_per_artist):
     for artist, songs in groups_by_artist.items():
         if stop_flag:
             break
-        selected_songs.extend(songs[:songs_per_artist])
+        if len(songs) <= songs_per_artist:
+            selected_songs.extend(songs)
+        else:
+            selected_songs.extend(random.sample(songs, songs_per_artist))
     print(f"Number of songs selected: {len(selected_songs)}")
     return selected_songs
 
 def limit_songs_by_size(selected_songs, max_size_bytes):
     """Limits the selection of songs based on total size."""
     print(f"Limiting selected songs to a total of {max_size_bytes} bytes...")
+    random.shuffle(selected_songs)
     total_size = 0
     limited_songs = []
     for song in selected_songs:
